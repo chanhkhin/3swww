@@ -49,9 +49,11 @@
   .head{
     position:absolute; top:8px; right:12px; color:#94a3b8; font-size:11px; letter-spacing:.2px;
   }
+  
 </style>
 </head>
 <body>
+  <script src="https://www.unpkg.com/@eohjsc/era-widget@1.1.3/src/index.js"></script>
 <div class="wrap">
   <div class="panel" id="panel">
     <div class="head">
@@ -111,6 +113,59 @@
       if(msg.deviceId) document.getElementById("deviceId").textContent=msg.deviceId;
     }
   });
+  const btn_sw1 = document.getElementById('btn-sw1'); 
+let configLed = null, newStatusLed = null, actions = []; 
+const eraWidget = new EraWidget();
+    eraWidget.init({
+            needRealtimeConfigs: true,         /* Cần giá trị hiện thời */
+            needHistoryConfigs: true,          /* Cần giá trị lịch sử */
+            needActions: true,                 /* Cần các hành động (ví dụ Bật/Tắt đèn) */
+            maxRealtimeConfigsCount: 3,        /* Số lượng tối đa giá trị hiện thời */
+            maxHistoryConfigsCount: 1,         /* Số lượng tối đa giá trị lịch sử */
+            maxActionsCount: 2,                /* Số lượng tối đa các hành động có thể kích hoạt */
+            minRealtimeConfigsCount: 0,        /* Số lượng tối thiểu giá trị hiện thời */
+            minHistoryConfigsCount: 0,         /* Số lượng tối thiểu giá trị lịch sử */
+            minActionsCount: 0,                /* Số lượng tối thiểu hành động */
+
+            /* Hàm callback được gọi khi có cấu hình được nhận từ server */
+            onConfiguration: (configuration) => {
+                /* Cập nhật cấu hình đèn LED từ cấu hình thời gian thực đầu tiên */
+                configLed = configuration.realtime_configs[0];
+                actions = configuration.actions; /* Lưu danh sách các hành động được nhận */
+            },
+
+            /* Hàm callback được gọi khi nhận giá trị mới từ server */
+            onValues: (values) => {
+                /* Lấy trạng thái hiện tại của đèn LED từ giá trị của cấu hình */
+                const stateLed = values[configLed.id].value;
+
+                /* Kiểm tra nếu trạng thái đèn thay đổi */
+                if (newStatusLed !== stateLed) {
+                    newStatusLed = stateLed;      /* Cập nhật trạng thái mới của đèn */
+                   updateSwitch(stateLed); /* Thay đổi trạng thái của switch dựa trên trạng thái đèn */
+                }
+            },
+        });
+function updateSwitch(state) {
+  const key = document.getElementById("sw1");
+  const label = document.getElementById("status-sw1");
+
+  if(state === 1){
+    key.classList.add("on");
+    label.textContent = "ON";
+  } else {
+    key.classList.remove("on");
+    label.textContent = "OFF";
+  }
+}
+   btn_sw1.addEventListener('click', () => {
+            if (newStatusLed === 1) {
+                eraWidget.triggerAction(actions[1]?.action, null); /* Kích hoạt hành động 'Tắt' */
+            } else {
+                eraWidget.triggerAction(actions[0]?.action, null); /* Kích hoạt hành động 'Bật' */
+            }
+        });
 </script>
 </body>
 </html>
+
