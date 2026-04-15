@@ -3,147 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AGV Smart Control</title>
+    <title>AGV Smart Warehouse HMI - ERa Integrated</title>
     <script src="https://www.unpkg.com/@eohjsc/era-widget@1.1.3/src/index.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet" />
     <style>
-        body { 
-            font-family: 'Segoe UI', sans-serif; background: #121212; color: white; 
-            margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-            user-select: none; -webkit-user-select: none; touch-action: none;
+        /* CSS Variables cho giao diện Sáng/Tối [cite: 864-905] */
+        :root {
+            --bg-main: #eef2f5; --bg-panel: #ffffff; --text-main: #2d3436;
+            --accent: #0984e3; --success: #00b894; --warning: #fdcb6e; --danger: #ff7675;
+            --header-bg: linear-gradient(135deg, #0984e3, #6c5ce7); --header-text: #ffffff;
+            --box-wifi: #e3f2fd; --box-stat: #e8f8f5; --box-volt: #fff3e0; --box-amp: #fff9c4;
+            --gauge-track: #f1f2f6; --shadow: rgba(0, 0, 0, 0.08);
         }
-        .header { text-align: center; padding: 15px; color: #00ffcc; font-weight: bold; font-size: 20px;}
+        [data-theme="dark"] {
+            --bg-main: #181b21; --bg-panel: #22262e; --text-main: #f5f6fa;
+            --header-bg: linear-gradient(135deg, #2d3436, #192a56); --header-text: #48dbfb;
+            --box-wifi: rgba(9, 132, 227, 0.15); --box-stat: rgba(0, 184, 148, 0.15);
+            --box-volt: rgba(230, 126, 34, 0.15); --box-amp: rgba(253, 203, 110, 0.15);
+            --gauge-track: #2f3542;
+        }
+
+        * { box-sizing: border-box; font-family: sans-serif; }
+        body { margin: 0; padding: 12px; height: 100vh; overflow: hidden; background: var(--bg-main); color: var(--text-main); display: grid; grid-template-rows: 55px 1fr 180px; gap: 12px; }
+
+        header { display: flex; justify-content: space-between; align-items: center; background: var(--header-bg); padding: 0 20px; border-radius: 8px; box-shadow: 0 4px 15px var(--shadow); }
+        .sys-title { font-size: 20px; font-weight: 900; color: var(--header-text); }
+        .status-badge { padding: 5px 15px; border-radius: 20px; font-weight: 800; font-size: 12px; background: rgba(255,255,255,0.2); color: #fff; }
+        .status-badge.running { background: var(--success); }
+        .status-badge.error { background: var(--danger); animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        .workspace { display: grid; grid-template-columns: 280px 1fr; gap: 12px; min-height: 0; }
+        .panel { background: var(--bg-panel); border-radius: 10px; padding: 16px; border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 10px var(--shadow); }
+        .panel-header { font-size: 13px; font-weight: 800; border-bottom: 2px solid var(--gauge-track); padding-bottom: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; }
+
+        .d-pad { display: grid; grid-template-columns: repeat(3, 65px); grid-gap: 10px; justify-content: center; }
+        .btn-dir { width: 65px; height: 65px; border-radius: 12px; border: 2px solid var(--gauge-track); background: var(--bg-main); font-size: 20px; font-weight: 800; cursor: pointer; transition: 0.15s; }
+        .btn-dir.active { background: var(--accent); color: white; transform: translateY(4px); }
+
+        .map-area { flex: 1; background: var(--bg-panel); border-radius: 8px; border: 2px solid var(--gauge-track); position: relative; overflow: hidden; }
+        .auto-layout { display: grid; grid-template-columns: 1fr 240px; gap: 16px; height: 100%; }
+        .btn-goline { background: linear-gradient(135deg, var(--accent), #00a8ff); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 900; cursor: pointer; }
+        .btn-goline.active { background: linear-gradient(135deg, #f39c12, #f1c40f); }
+
+        .footer-workspace { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .gauges-area { display: flex; justify-content: space-around; align-items: center; }
+        .gauge-container { display: flex; flex-direction: column; align-items: center; width: 120px; position: relative; }
+        .gauge { position: relative; width: 120px; height: 60px; overflow: hidden; }
+        .gauge-bg { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 10px solid var(--gauge-track); }
+        .gauge-fill { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 10px solid transparent; border-bottom-color: var(--accent); border-left-color: var(--accent); transform: rotate(-45deg); transition: 0.4s; }
+        .gauge-val { font-size: 24px; font-weight: 900; }
+
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100%; }
+        .info-box { border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 2px 6px var(--shadow); }
+        .info-box .i-label { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 2px; }
+        .info-box .i-val { font-size: 18px; font-weight: 900; font-family: monospace; }
         
-        .mode-container { display: flex; justify-content: center; gap: 15px; padding: 10px; }
-        .btn-mode {
-            padding: 12px 20px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px;
-            cursor: pointer; background: #333; color: white; transition: 0.3s; flex: 1; max-width: 120px;
-        }
-        .btn-mode.active-manual { background: #FF5500; }
-        .btn-mode.active-auto { background: #00ffcc; color: black; }
-
-        .auto-panel {
-            display: none; flex-direction: column; padding: 15px; background: #1e1e1e;
-            margin: 0 15px 10px 15px; border-radius: 15px; border: 1px solid #333; flex: 1; overflow-y: auto;
-        }
-        .auto-panel.show { display: flex; }
-
-        .section-title { font-size: 12px; color: #888; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
-        
-        /* Giao diện quét & thêm thẻ */
-        .input-group { display: flex; gap: 10px; margin-bottom: 15px; }
-        .uid-input {
-            flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #444;
-            background: #2a2a2a; color: #00ffcc; font-size: 15px; outline: none; transition: 0.3s;
-        }
-        .btn-add {
-            background: #00ffcc; color: black; border: none; border-radius: 8px;
-            padding: 0 20px; font-weight: bold; cursor: pointer; font-size: 20px;
-        }
-
-        /* Nút GO LINE MỚI */
-        .btn-goline {
-            background: #ffc107; color: black; border: none; padding: 12px; border-radius: 8px;
-            font-size: 14px; font-weight: bold; cursor: pointer; margin-bottom: 15px; text-align: center;
-            box-shadow: 0 4px 10px rgba(255, 193, 7, 0.3); transition: 0.2s;
-        }
-        .btn-goline:active { transform: scale(0.95); background: #e0a800; }
-
-        .checkpoint-list { 
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); 
-            gap: 10px; margin-bottom: 15px; 
-        }
-        .point-card {
-            background: #333; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #444;
-        }
-        .point-card .letter { font-size: 18px; font-weight: bold; color: #00ffcc; display: block; }
-        .point-card .uid-label { font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        .action-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn-action { flex: 1; padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 12px; }
-        .btn-save { background: #28a745; color: white; }
-        .btn-reset { background: #dc3545; color: white; }
-
-        .divider { height: 1px; background: #444; margin: 10px 0 20px 0; position: relative; }
-        .divider span { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #1e1e1e; padding: 0 10px; font-size: 12px; color: #888; font-weight: bold; }
-
-        /* GOTO Section & Các trạng thái màu sắc MỚI */
-        .goto-list { display: flex; flex-direction: column; gap: 10px; }
-        .btn-goto {
-            background: #17a2b8; color: white; border: none; padding: 15px; border-radius: 10px;
-            font-size: 16px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
-            transition: 0.3s;
-        }
-        .btn-goto span.uid-txt { font-size: 12px; opacity: 0.8; font-family: monospace; font-weight: normal; }
-        
-        /* Màu khi xe đang chạy tới điểm (Đỏ) */
-        .btn-goto.status-moving { background-color: #dc3545 !important; box-shadow: 0 0 15px rgba(220, 53, 69, 0.5); }
-        /* Màu khi xe đã đến đích và trùng UID (Xanh) */
-        .btn-goto.status-arrived { background-color: #28a745 !important; box-shadow: 0 0 15px rgba(40, 167, 69, 0.5); }
-
-        .no-data-msg { text-align: center; color: #666; font-size: 13px; font-style: italic; }
-
-        /* Panel MANUAL (Giữ nguyên) */
-        .manual-panel { display: flex; justify-content: space-between; align-items: center; padding: 20px; }
-        .manual-panel.hidden { display: none; }
-        .joy-box { background: #1e1e1e; padding: 15px; border-radius: 20px; border: 1px solid #333; text-align: center; width: 42%; }
-        .val-text { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #00ffcc; font-family: monospace; }
-        .ctrl-btn { background: #444; border: 2px solid #555; color: white; font-size: 14px; font-weight: bold; border-radius: 12px; cursor: pointer; transition: 0.1s; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        .ctrl-btn:active { background: #00ffcc; color: black; transform: scale(0.92); }
-        .pad-horizontal { display: flex; gap: 10px; justify-content: center; }
-        .pad-horizontal .ctrl-btn { width: 65px; height: 50px; }
-        .pad-vertical { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-        .pad-vertical .ctrl-btn { width: 70px; height: 70px; }
+        .elegant-toggle { background: var(--bg-main); border-radius: 20px; padding: 4px; display: flex; }
+        .elegant-toggle button { background: transparent; border: none; padding: 5px 12px; font-size: 11px; font-weight: 800; border-radius: 16px; cursor: pointer; }
+        .elegant-toggle button.active { background: var(--accent); color: white; }
     </style>
 </head>
 <body>
-
-    <div class="header">AGV CONTROL CENTER</div>
-
-    <div class="mode-container">
-        <button id="btnManual" class="btn-mode active-manual">MANUAL</button>
-        <button id="btnAuto" class="btn-mode">AUTO</button>
-    </div>
-
-    <div id="autoPanel" class="auto-panel">
-        
-        <div class="section-title">1. DÒ & LƯU LỘ TRÌNH</div>
-        <button id="btnGoLine" class="btn-goline">▶ CHẠY GO LINE DÒ THẺ (AUTO)</button>
-
-        <div class="input-group">
-            <input type="text" id="uidInput" class="uid-input" placeholder="Quét hoặc nhập UID...">
-            <button id="btnAdd" class="btn-add">+</button>
+    <header>
+        <div class="sys-title">AGV <span>PRO-DASH</span></div>
+        <div class="sys-status-bar">
+            <div id="sysStatus" class="status-badge stopped">STOPPED</div>
+            <button id="btnEStop" style="background:var(--danger); color:white; border:none; padding:6px 15px; border-radius:5px; font-weight:900; cursor:pointer;">E-STOP</button>
         </div>
-
-        <div id="checkpointList" class="checkpoint-list"></div>
-
-        <div class="action-group">
-            <button id="btnSave" class="btn-action btn-save">LƯU DỮ LIỆU</button>
-            <button id="btnReset" class="btn-action btn-reset">RESET</button>
+        <div style="display: flex; gap: 15px; align-items: center; color:white;">
+            <button id="btnTheme" style="background:none; border:none; cursor:pointer; font-size:18px;">🌓</button>
+            <div id="clockTime" style="font-weight:800; font-size:16px;">00:00:00</div>
         </div>
+    </header>
 
-        <div class="divider"><span>2. LỆNH ĐIỀU HƯỚNG GOTO</span></div>
-        <div id="gotoList" class="goto-list"></div>
-
-    </div>
-
-    <div id="manualPanel" class="manual-panel">
-        <div class="joy-box">
-            <div class="val-text" id="labelLeft">1497</div>
-            <div class="pad-horizontal">
-                <button id="btnLeft" class="ctrl-btn">TRÁI</button>
-                <button id="btnRight" class="ctrl-btn">PHẢI</button>
+    <div class="workspace">
+        <div class="panel">
+            <div class="panel-header">🕹️ MANUAL CONTROL
+                <div class="elegant-toggle">
+                    <button id="btnCtrlWeb" class="active">WEB</button>
+                    <button id="btnCtrlRC">RC</button>
+                </div>
             </div>
+            <div class="d-pad" id="interZone">
+                <div style="visibility:hidden"></div><button id="btnUp" class="btn-dir">W</button><div></div>
+                <button id="btnLeft" class="btn-dir">A</button><button id="btnDown" class="btn-dir">S</button><button id="btnRight" class="btn-dir">D</button>
+            </div>
+            <p style="font-size:10px; text-align:center; color:gray; margin-top:20px;">Dùng W A S D để lái khi bật chế độ WEB.</p>
         </div>
 
-        <div class="joy-box">
-            <div class="val-text" id="labelRight">1494</div>
-            <div class="pad-vertical">
-                <button id="btnUp" class="ctrl-btn">TIẾN</button>
-                <button id="btnDown" class="ctrl-btn">LÙI</button>
+        <div class="panel">
+            <div class="panel-header">🗺️ VIRTUAL MAP & ROUTING</div>
+            <div class="auto-layout">
+                <div class="map-area">
+                    <svg id="svgMap" width="100%" height="100%"></svg>
+                    <div id="agvIcon" style="position:absolute; width:20px; height:20px; background:var(--accent); border-radius:50%; border:2px solid white; transition:1s; opacity:0;"></div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button id="btnGoLine" class="btn-goline">▶ BẮT ĐẦU GO LINE</button>
+                    <input type="text" id="uidInput" placeholder="Nhập/Quét UID" style="padding:10px; border-radius:5px; border:1px solid #ccc; text-align:center;">
+                    <button id="btnAddPoint" style="background:var(--success); color:white; border:none; padding:8px; border-radius:5px; font-weight:800;">+ THÊM ĐIỂM</button>
+                    <div id="pointList" style="flex:1; overflow-y:auto; border-top:1px solid #eee; padding-top:10px;"></div>
+                </div>
             </div>
         </div>
     </div>
 
+    <div class="footer-workspace">
+        <div class="panel">
+            <div class="panel-header">⚡ PWM REALTIME FEEDBACK</div>
+            <div class="gauges-area">
+                <div class="gauge-container"><span>LEFT</span><div class="gauge"><div class="gauge-bg"></div><div id="gaugeL" class="gauge-fill"></div></div><div class="gauge-val" id="valL">0</div></div>
+                <div class="gauge-container"><span>RIGHT</span><div class="gauge"><div class="gauge-bg"></div><div id="gaugeR" class="gauge-fill"></div></div><div class="gauge-val" id="valR">0</div></div>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">📊 TELEMETRY</div>
+            <div class="info-grid">
+                <div class="info-box box-wifi"><span class="i-label">Wi-Fi</span><span class="i-val" id="valWifi">-- %</span></div>
+                <div class="info-box box-stat"><span class="i-label">Status</span><span class="i-val" id="valState">OK</span></div>
+                <div class="info-box box-volt"><span class="i-label">Battery</span><span class="i-val" id="valVolt">-- V</span></div>
+                <div class="info-box box-amp"><span class="i-label">Current</span><span class="i-val" id="valAmp">-- A</span></div>
+            </div>
+        </div>
+    </div>
     <script src="script.js"></script>
 </body>
 </html>
