@@ -107,6 +107,20 @@
         .bottom-actions button { padding: 10px; border: none; border-radius: 6px; font-weight: 800; font-size: 12px; cursor: pointer;}
         .btn-save { background: var(--border); color: var(--text-main); } .btn-reset { background: var(--border); color: var(--text-main); }
 
+        /* THIẾT KẾ PHẦN MAP ĐÃ LƯU */
+        .saved-maps-area { background: var(--bg-main); border-radius: 8px; padding: 10px; border: 1px solid var(--border); margin-top: 10px; display: none; }
+        .saved-maps-area.show { display: block; }
+        .map-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-panel); border-radius: 6px; font-weight: bold; border-left: 4px solid var(--accent); box-shadow: 0 2px 4px var(--shadow);}
+        
+        /* CÔNG TẮC BẬT TẮT CHẠY MAP */
+        .switch-container { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted);}
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success); }
+        input:checked + .slider:before { transform: translateX(18px); }
+
         /* ================= FOOTER ================= */
         .footer-workspace { display: flex; flex-direction: column; gap: 12px; }
         @media (min-width: 600px) { .footer-workspace { display: grid; grid-template-columns: 1fr 1fr; } }
@@ -202,6 +216,21 @@
                         <button id="btnSave" class="btn-save">LƯU MAP</button>
                         <button id="btnReset" class="btn-reset">XÓA HẾT</button>
                     </div>
+
+                    <div id="savedMapsArea" class="saved-maps-area">
+                        <div style="font-size: 11px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px;">BẢN ĐỒ ĐÃ LƯU</div>
+                        <div class="map-item">
+                            <span>🗺️ MAP 1</span>
+                            <div class="switch-container">
+                                <span id="lblAutoRoute">CHẠY MAP</span>
+                                <label class="switch">
+                                  <input type="checkbox" id="toggleAutoRoute">
+                                  <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -242,7 +271,7 @@
     <script>
         const eraWidget = new EraWidget();
         
-        let actionV1, actionV2, actionV3, actionV10, actionV11, actionV12; 
+        let actionV1, actionV2, actionV3, actionV10, actionV11, actionV12, actionV13; 
         let configUID, configWifi, configVolt, configAmp, configPWML, configPWMR; 
         
         let savedCheckpoints = JSON.parse(localStorage.getItem('AGV_Checkpoints')) || [];
@@ -257,6 +286,7 @@
         const svgMap = document.getElementById('svgMap');
         const agvIcon = document.getElementById('agvIcon');
         const interZone = document.getElementById('interZone');
+        const toggleAutoRoute = document.getElementById('toggleAutoRoute');
 
         // Khởi tạo E-Ra Widget
         eraWidget.init({
@@ -269,6 +299,9 @@
                         actionV10 = conf.actions[3]; // V10: Base Speed
                         actionV11 = conf.actions[4]; // V11: Kp
                         actionV12 = conf.actions[5]; // V12: Kd
+                    }
+                    if(conf.actions.length >= 7) {
+                        actionV13 = conf.actions[6]; // V13: Truyền UID mục tiêu
                     }
                 }
                 if(conf.realtime_configs) {
@@ -349,7 +382,15 @@
         // ================= XỬ LÝ MAP ẢO VÀ RFID =================
         function renderMapAndList() {
             pointListDiv.innerHTML = ''; svgMap.innerHTML = ''; mapPoints = [];
-            if(savedCheckpoints.length === 0) { agvIcon.style.opacity = 0; return; }
+            
+            // Xử lý ẩn/hiện khu vực Map Đã Lưu
+            if(savedCheckpoints.length === 0) { 
+                agvIcon.style.opacity = 0; 
+                document.getElementById('savedMapsArea').classList.remove('show');
+                return; 
+            } else {
+                document.getElementById('savedMapsArea').classList.add('show');
+            }
 
             const w = svgMap.clientWidth || 400; const h = svgMap.clientHeight || 300;
             const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) * 0.35;
@@ -405,7 +446,15 @@
             if(systemState === 'error') return alert("Nhả Nút Dừng Khẩn Cấp!");
             if(controlSource !== 'WEB') return alert("Chuyển quyền sang WEB để điều khiển Tự Động!");
             
+            // Nếu người dùng không bật công tắc "CHẠY MAP", việc bấm vào điểm chỉ là xem trên bản đồ
+            if(!toggleAutoRoute.checked) {
+                moveAGVTo(index);
+                return;
+            }
+
             targetUID = savedCheckpoints[index].uid;
+            // Truyền Target UID xuống ESP32
+            if(actionV13) eraWidget.triggerAction(actionV13.action, null, {value: targetUID});
 
             document.querySelectorAll('.point-btn').forEach(b => b.classList.remove('target', 'arrived'));
             for(let i=0; i<savedCheckpoints.length; i++) {
@@ -428,31 +477,20 @@
                 if(cp.uid === rfid) moveAGVTo(index); 
             });
 
-            // Logic tự động hành trình
-            if(targetUID !== null) {
-                if(rfid === targetUID) {
-                    // Đã tới đích -> Dừng lại
-                    setStatus('stopped');
-                    targetUID = null;
-                    savedCheckpoints.forEach((cp, index) => {
-                        if(cp.uid === rfid) {
-                            document.getElementById(`btnCP_${index}`).classList.replace('target', 'arrived');
-                            const tc = document.getElementById(`svgCircle_${index}`);
-                            if(tc) { tc.setAttribute("stroke", "var(--success)"); tc.setAttribute("fill", "rgba(0, 184, 148, 0.3)"); }
-                        }
-                    });
-                } else {
-                    // Mới qua trạm trung gian -> Ra lệnh đi tiếp ngay
-                    if(actionV3) eraWidget.triggerAction(actionV3.action, null, {value: 2100});
-                }
-            } else {
-                // Đụng thẻ bất kỳ khi Go Line tự do -> Dừng
+            // Giao diện tự động báo dừng khi nhận đúng điểm
+            if (systemState === 'running') {
                 setStatus('stopped');
-                if(actionV3) eraWidget.triggerAction(actionV3.action, null, {value: 2000}); 
+                savedCheckpoints.forEach((cp, index) => {
+                    if(cp.uid === rfid) {
+                        document.getElementById(`btnCP_${index}`).classList.replace('target', 'arrived');
+                        const tc = document.getElementById(`svgCircle_${index}`);
+                        if(tc) { tc.setAttribute("stroke", "var(--success)"); tc.setAttribute("fill", "rgba(0, 184, 148, 0.3)"); }
+                    }
+                });
             }
         }
 
-        // ================= XỬ LÝ ĐIỀU KHIỂN THỦ CÔNG (ĐÃ CHỐNG LỖI KẸT NÚT) =================
+        // ================= XỬ LÝ ĐIỀU KHIỂN THỦ CÔNG =================
         function sendV1(value) {
             if(systemState === 'error' || controlSource !== 'WEB') return;
             setStatus(value === 1494 ? 'stopped' : 'running');
@@ -534,20 +572,24 @@
             savedCheckpoints.push({uid: uid}); uidInput.value = ""; renderMapAndList();
         };
         
-        document.getElementById('btnSave').onclick = () => { localStorage.setItem('AGV_Checkpoints', JSON.stringify(savedCheckpoints)); alert("Đã lưu Map!"); };
+        document.getElementById('btnSave').onclick = () => { localStorage.setItem('AGV_Checkpoints', JSON.stringify(savedCheckpoints)); renderMapAndList(); alert("Đã lưu Map!"); };
         document.getElementById('btnReset').onclick = () => { if(confirm("Xóa toàn bộ bản đồ?")) { savedCheckpoints = []; localStorage.removeItem('AGV_Checkpoints'); renderMapAndList(); }};
         
         document.getElementById('btnGoLine').onclick = function() {
             if(systemState === 'error') return;
             if(controlSource !== 'WEB') return alert("Vui lòng chuyển sang WEB (E-RA) để chạy Tự động!");
+            
+            // Hủy lệnh định tuyến nếu bấm chạy tự do
+            if(actionV13) eraWidget.triggerAction(actionV13.action, null, {value: ""}); 
+
             const isRun = this.classList.toggle('active');
-            targetUID = null; // Hủy lệnh định tuyến nếu bấm chạy tự do
             if(isRun) { this.innerHTML = "⏸ TẠM DỪNG"; setStatus('running'); if(actionV3) eraWidget.triggerAction(actionV3.action, null, {value: 2100}); } 
             else { this.innerHTML = "▶ BẮT ĐẦU GO LINE"; setStatus('stopped'); if(actionV3) eraWidget.triggerAction(actionV3.action, null, {value: 2000}); }
         };
 
         document.getElementById('btnEStop').onclick = () => {
             setStatus('error'); updateGauges(0, 0); targetUID = null;
+            if(actionV13) eraWidget.triggerAction(actionV13.action, null, {value: ""}); // Xóa lệnh Map
             document.getElementById('btnGoLine').classList.remove('active'); document.getElementById('btnGoLine').innerHTML = "▶ BẮT ĐẦU GO LINE";
             if(actionV1) eraWidget.triggerAction(actionV1.action, null, {value: 1494});
             if(actionV2) eraWidget.triggerAction(actionV2.action, null, {value: 1497});
